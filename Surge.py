@@ -50,6 +50,8 @@ from lib.serial_device import SerialDevice
 from lib.printer import Printer
 from operations.ejecutar_command import EjecutarCommand
 from operations.imprimir_report import ImprimirReport
+from lib.busca_tty import USBDeviceScanner
+
 from src.config import (
     COLOR_TESTING_INDICATOR,
     COLOR_OK,
@@ -95,6 +97,16 @@ class SurgeTester:
         self.RUBIK_FONT_PATH = "~/Documentos/Surge_proreporttection/src/fonts/Rubik_Light.ttf"  
         self.DIRECTORIO_LOGO = os.path.join(os.path.dirname(__file__), 'src', 'templates', 'W_Label_Devices_1.png')
         self.IMPRESORA = "QL-820NWB-2"
+        self.FIXTURE_SERIAL = "90355de66362ed1192c19f1e8680196e"
+        self.usb_connected = ""
+        scanner = USBDeviceScanner()
+        devices = scanner.scan()
+
+        for d in devices:
+            print(d["ttyUSB"], d["idVendor"], d["serial"])
+            if d["serial"] == self.FIXTURE_SERIAL:
+                self.usb_connected = d["ttyUSB"]
+                
 
     def create_widgets(self):
         """Crea y organiza todos los widgets de la interfaz."""
@@ -580,7 +592,7 @@ class SurgeTester:
         res_command = EjecutarCommand(
             command=b'\n' + command + b'\n',
             expected_response=expected_response,
-            device_serial=SerialDevice(port="/dev/ttyUSB0")
+            device_serial=SerialDevice(port=self.usb_connected)
         )
         print(f"Ejecutando comando: {command} con respuesta esperada: {expected_response}")
         print(f'"respuesta recibida estoy en automatic_test:\n"+ {res_command}')
