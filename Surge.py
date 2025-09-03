@@ -48,8 +48,10 @@ from pylibdmtx.pylibdmtx import encode
 from lib.database_manager import DatabaseManager
 from lib.serial_device import SerialDevice
 from lib.printer import Printer
+from lib.test_papel import Soporte_montado
 from operations.ejecutar_command import EjecutarCommand
 from operations.imprimir_report import ImprimirReport
+from lib.busca_tty import USBDeviceScanner
 from src.config import (
     COLOR_TESTING_INDICATOR,
     COLOR_OK,
@@ -90,11 +92,41 @@ class SurgeTester:
 
         self.load_products_to_hmi()
         self.on_erp_selected(None)
+        self.usb_connected =""
+        # Dimensiones de la etiqueta
+        self.mm_to_px = 11.81  # Factor de conversión de mm a px (300 DPI)
+        self.label_width = int(50 * self.mm_to_px)  # 50 mm de ancho
+        label_width_transformado = int(round(self.label_width/self.mm_to_px))
+        self.label_height = int(35 * self.mm_to_px)  # 35 mm de alto
 
         self.BRAND = "LOADSENSING G7"
-        self.RUBIK_FONT_PATH = "~/Documentos/Surge_proreporttection/src/fonts/Rubik_Light.ttf"  
+        self.RUBIK_FONT_PATH = "/home/ws-prod23/Surge_protection/src/fonts/Rubik-Light.ttf"  
         self.DIRECTORIO_LOGO = os.path.join(os.path.dirname(__file__), 'src', 'templates', 'W_Label_Devices_1.png')
-        self.IMPRESORA = "QL-820NWB-2"
+        self.IMPRESORA = "Brother_packaging"
+        self.FIXTURE = "c07f4c1c1a5bef11948d45405e7370b6"
+
+        scanner = USBDeviceScanner()
+        devices = scanner.scan()
+
+        for d in devices:
+            print(d["ttyUSB"], d["idVendor"], d["serial"])
+            if d["serial"] == self.FIXTURE:
+                self.usb_connected = d["ttyUSB"]
+                print(f"👍 👍  La fixture está ahora conectada al puerto --> {self.usb_connected}\n")
+            
+        papel_montado = Soporte_montado()
+        print (f"este es el valor de papel_montado cogiendo los dos primeros digitos --> {papel_montado[:2]}\n")
+        print (f"este es el contenido de label_width_transformado --> {label_width_transformado}")
+        if label_width_transformado == int(papel_montado[:2]):
+            print(f"el ancho de papel es {label_width_transformado}")
+            label_width_transformado = papel_montado
+            print (f" ahora el valor de label_width_transformado es --> {label_width_transformado}")
+        
+        
+        if papel_montado != label_width_transformado:
+            aviso_papel = messagebox.showwarning(title="ATENCIÓN EN LA IMPRESORA", message=f"El papel montado es {papel_montado} pero el que se necesita es {label_width_transformado}, por favor cambia el rollo")
+
+        print (f"\n El papel montado en la impresora es --> {papel_montado} y el formato de la etiqueta necesita {label_width_transformado}\n")
 
     def create_widgets(self):
         """Crea y organiza todos los widgets de la interfaz."""
@@ -577,10 +609,13 @@ class SurgeTester:
         Data_max = step_data[8]
         print(f"Data Max: {Data_max}\n")
 
+        puerto = "/dev/"+self.usb_connected
+        print(f"el puerto actual para la fixture es --> {puerto}")
+
         res_command = EjecutarCommand(
             command=b'\n' + command + b'\n',
             expected_response=expected_response,
-            device_serial=SerialDevice(port="/dev/ttyUSB0")
+            device_serial=SerialDevice(port=puerto)
         )
         print(f"Ejecutando comando: {command} con respuesta esperada: {expected_response}")
         print(f'"respuesta recibida estoy en automatic_test:\n"+ {res_command}')
@@ -760,9 +795,8 @@ class SurgeTester:
         lote = self.packaging_units[1]['lote']
         print(f"Este es el numero de lote cogido de packaging_units: {lote}\n")
         
-        mm_to_px = 11.81  # Factor de conversión de mm a px (300 DPI)
         font_size_std = 32  # Tamaño de la fuente
-        address_font_size = 24  # Tamaño de la fuente para la dirección
+        address_font_size = 23  # Tamaño de la fuente para la dirección
 
 
         font_path = self.RUBIK_FONT_PATH
@@ -773,45 +807,73 @@ class SurgeTester:
         
         print(f'valor de font --> {fuente_std} y de font_size --> {font_size_std}\n')
 
-        
-
-        # Dimensiones de la etiqueta
-        label_width = int(62 * mm_to_px)  # 62 mm de ancho
-        label_height = int(35 * mm_to_px)  # 50 mm de alto
-
         # Crear la etiqueta
-        label = Image.new("RGB", (label_width, label_height), "white")
+        label = Image.new("RGB", (self.label_width, self.label_height), "white")
         
         logo_path = self.DIRECTORIO_LOGO
         print(f'Imagen logo --> {logo_path}\n')
 
-        logo = Image.open(logo_path,"r").resize((int(42 * mm_to_px), int(8 * mm_to_px)))
+        logo = Image.open(logo_path,"r").resize((int(39 * self.mm_to_px), int(7 * self.mm_to_px)))
 
         label.paste(logo, (0, 0))
 
         # Insertar texto
         draw = ImageDraw.Draw(label)
         #print(f'creado draw --> {draw}')
-        draw.text((2 * mm_to_px, 8 * mm_to_px), "Viriat 47, 10th Floor, 08014 Barcelona, Spain",font=fuente_address ,  fill='black')
+        draw.text((2 * self.mm_to_px, 6 * self.mm_to_px), "Viriat 47, 10th Floor, 08014 Barcelona, Spain",font=fuente_address ,  fill='black')
         #print(f'creado el texto de la dirección de viriat')
-        draw.text((2 * mm_to_px, 16 * mm_to_px), "Model:  " + model, font=fuente_std, fill="black")
+        draw.text((0 * self.mm_to_px, 14 * self.mm_to_px), "Model:  " + model, font=fuente_std, fill="black")
         #print(f'creado el texto para el Model')
-        draw.text((2 * mm_to_px, 21 * mm_to_px), "ERP Code:  " + erp_code,font=fuente_std,  fill="black")
+        draw.text((0 * self.mm_to_px, 19 * self.mm_to_px), "ERP Code:  " + erp_code,font=fuente_std,  fill="black")
         #print(f'creado el texto para el ERP')
-        draw.text((2 * mm_to_px, 26 * mm_to_px), "Serial Nb:  " + Nb_serial, font=fuente_std, fill="black")
+        draw.text((0 * self.mm_to_px, 24 * self.mm_to_px), "Serial Nb:  " + Nb_serial, font=fuente_std, fill="black")
 
-        draw.text((2 * mm_to_px, 31 * mm_to_px), "Batch:  " + lote, font=fuente_std, fill="black")
+        draw.text((0 * self.mm_to_px, 29 * self.mm_to_px), "Batch:  " + lote, font=fuente_std, fill="black")
         
         # Insertar código Data Matrix
         datam = erp_code + ";" + Nb_serial +";"+ Batch_n
         encoded = encode(datam.encode('utf8'))
         dmtx = Image.frombytes('RGB', (encoded.width, encoded.height), encoded.pixels)
-        dmtx = dmtx.resize((int(16 * mm_to_px), int(16 * mm_to_px)))
-        label.paste(dmtx, (int(46*mm_to_px), int(2 * mm_to_px)))
+        dmtx = dmtx.resize((int(10 * self.mm_to_px), int(10 * self.mm_to_px)))
+        label.paste(dmtx, (int(39*self.mm_to_px), int(9 * self.mm_to_px)))
 
         # Guardar la etiqueta como archivo
-        output_path = os.path.expanduser("~/Documentos/Surge_protection/output/packaging_label.png")      
-        label.save(output_path)
+
+        # 1. Define la ruta base con la tilde
+        base_output_path = "~/Surge_protection/output"
+    
+        # 2. Expande la tilde a una ruta de usuario real y válida
+        expanded_output_path = os.path.expanduser(base_output_path)
+        
+        # 3. Verifica y crea el directorio si no existe
+        if not os.path.exists(expanded_output_path):
+            os.makedirs(expanded_output_path)
+            print(f"Directorio creado: {expanded_output_path}")
+
+        # 4. Define el nombre del archivo de la etiqueta
+        label_name = f"{Nb_serial}.png"
+        
+        # 5. Combina el directorio y el nombre del archivo de forma segura
+        archivo_label = os.path.join(expanded_output_path, label_name)
+        
+        # 6. Muestra la ruta final para depuración
+        print(f"La ruta y el nombre del archivo es --> {archivo_label}")
+        
+        # 7. Guarda la etiqueta en la ruta correcta
+        label.save(archivo_label)
+
+
+
+
+        #output_path = os.path.expanduser("home/ws-prod23/Surge_protection/output/packaging_label.png") 
+        #output_path = "~/Surge_protection/output/"     
+        #output_dir = os.path.dirname(output_path)
+        #if not os.path.exists(output_dir):
+        #    os.makedirs(output_dir)  
+        #label_name = f"{Nb_serial}.png"
+        #archivo_label = output_path+label_name
+        #print(f" la ruta y el nombre del archivo es --> {archivo_label}")
+        #label.save(archivo_label)
         
         # Insertamos en base de datos los datos de la etiqueta
         timestamp = datetime.datetime.now()
@@ -831,7 +893,8 @@ class SurgeTester:
         
         # Enviar el archivo a la impresora configurada
         try:
-            os.system(f'lp -o orientation-requested=3 -d {self.IMPRESORA} {output_path}')
+            #os.system(f'lp -o orientation-requested=3 -d {self.IMPRESORA} {output_path}{label_name}')
+            os.system(f'lp -o orientation-requested=3 -d {self.IMPRESORA} {archivo_label}')
            
             messagebox.showinfo("Impresión", "La etiqueta se envió a la impresora correctamente.")
             
